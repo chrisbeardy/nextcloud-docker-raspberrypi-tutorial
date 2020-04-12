@@ -1,0 +1,66 @@
+version: "2"
+services:
+  nextcloud:
+    image: linuxserver/nextcloud
+    container_name: nextcloud
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - ~/nextcloud/config:/config
+      - ~/nextcloud/data:/data
+    ports:
+      - 9443:443
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nextcloud.entrypoints=websecure
+      - traefik.http.routers.nextcloud.rule=Host("<your_domain>")
+      - traefik.http.routers.nextcloud.tls=true
+      - traefik.http.routers.nextcloud.tls.certresolver=myhttpchallenge
+      - traefik.http.routers.nextcloud.service=nextcloud
+      - traefik.http.routers.nextcloud.middlewares=nextcloud-regex,nextcloud-headers
+      - traefik.http.services.nextcloud.loadbalancer.server.port=443
+      - traefik.http.services.nextcloud.loadbalancer.server.scheme=https
+      - traefik.http.middlewares.nextcloud-regex.redirectregex.regex=https://(.*)/.well-known/(card|cal)dav
+      - traefik.http.middlewares.nextcloud-regex.redirectregex.replacement=https://$$1/remote.php/dav/
+      - traefik.http.middlewares.nextcloud-regex.redirectregex.permanent=true
+      - traefik.http.middlewares.nextcloud-headers.headers.customFrameOptionsValue=SAMEORIGIN
+      - traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000
+  mariadb:
+    image: linuxserver/mariadb
+    container_name: mariadb
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - MYSQL_ROOT_PASSWORD=ChangeMePlease
+      - TZ=Europe/London
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=ChangeMeAlso
+    volumes:
+      - ~/mariadb/config:/config
+    ports:
+      - 3306:3306
+    restart: unless-stopped
+  traefik:
+    image: traefik:v2.0
+    container_name: traefik
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.myhttpchallenge.acme.httpchallenge=true
+      - --certificatesresolvers.myhttpchallenge.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.myhttpchallenge.acme.email=someaddress@somedomain.com
+      - --certificatesresolvers.myhttpchallenge.acme.storage=/acme.json
+      - --serverstransport.insecureskipverify
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/traefik/acme.json:/acme.json
+    restart: unless-stopped
