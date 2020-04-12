@@ -223,12 +223,12 @@ From the nextcloud admin settings (on webpage) go to basic settings to set up em
 
 If you are using a gmail account this is:
 
-send mode -> smtp.gmail.com
-encryption -> SSL/TLS
-authentication method -> login
-authentication required -> YES
-server address -> smtp.gmail.com : 465
-credentials are your email address and password (or an app password if using 2FA on google).
+- send mode -> smtp.gmail.com
+- encryption -> SSL/TLS
+- authentication method -> login
+- authentication required -> YES
+- server address -> smtp.gmail.com : 465
+- credentials are your email address and password (or an app password if using 2FA on google).
 
 ## Connecting from the outside world
 
