@@ -1,3 +1,5 @@
+# NOTE this does not seem to work completely with the latest versions of the nextcloud container, Traefik is not forwarding port 443 to the container.
+
 # Installing nextcloud on a raspberry pi with docker
 
 This is a set up guide for installing [nextcloud](https://nextcloud.com/) on a raspberry pi running ubuntu server using docker.
