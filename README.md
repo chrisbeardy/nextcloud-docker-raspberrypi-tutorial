@@ -1,15 +1,6 @@
-# NOTE this does not seem to work completely with the latest versions of the nextcloud container, Traefik is not forwarding port 443 to the container.
-
 # Installing nextcloud on a raspberry pi with docker
 
 This is a set up guide for installing [nextcloud](https://nextcloud.com/) on a raspberry pi running ubuntu server using docker.
-
-The nextcloud instance used in the docker compose comes from [linuxserver/nextcloud](https://docs.linuxserver.io/images/docker-nextcloud) ([linuxerver github](https://github.com/linuxserver/docker-nextcloud)), the image is built using alpine nginx as the webserver and we will use [traefik](https://containo.us/traefik) for the reverse proxy.
-
-Alternative version from nextcloud using an apache server can be used, details:
-https://hub.docker.com/_/nextcloud/
-
-This guide made good use of a Linux Format magazine article series (issue 260 & 261). Many thanks to Chris Notley and Linux Format magazine.
 
 In order to follow this through you will need a DNS domain.
 
@@ -22,21 +13,22 @@ A domain may take a few hours to propagate so you may have to wait at this point
 
 ## Install ubuntu raspberry pi
 
-https://ubuntu.com/download/raspberry-pi
+[download page](https://ubuntu.com/download/raspberry-pi)
 
-- download the image for your pi but do not unzip the image
-- flash using **gnomes disks** app by choosing sd card and using the restore image option
+- download the **64-bit** image but do not unzip the image
+- insert the sd card into your pc and flash the image using the **gnomes disks** program
+  - select the sd card and use the `restore disk image` option fthe the setting menu
 - plug the pi into your router and find it's ip
-- ssh is enabled by default so you should be able to ssh straight into it
+- ssh is enabled by default so you should be able to ssh into it
   - user: ubuntu
   - pass: ubuntu
 
-when you first login it will ask you to change the password.
+when you first login it will ask you to change the password, do so then relog it over shh. On first boot ubuntu will expand the file system, after a short while you should be able to update ubuntu using `sudo apt update` and `sudo apt upgrade`.
 
 ## Set up static IP on the pi
 
 ```
-sudo nano /etc/netplan/01.netcfg.yaml
+sudo nano /etc/netplan/01-netcfg.yaml
 ```
 
 add the following changing the ip to your prefernce (note this uses cloudfare 1.1.1.1 nameservers):
@@ -54,21 +46,16 @@ network:
         addresses: [1.1.1.1, 1.0.0.1]
 ```
 
-## set up port forwarding
-forward ports 80 and 443 on your router to point at the raspberry pi, port 80 is required later to get your TLS certificate.
+## Set up port forwarding
 
-## install docker
+forward ports 80 and 443 on your router to point at the raspberry pi.
+
+## Install docker
 
 ```
 curl -fsSL https://get.docker.com -o get-docker.sh
-```
-
-```
 sh get-docker-sh
-```
-
-```
-sudo usermode -aG docker ubuntu
+sudo usermod -aG docker ubuntu
 ```
 
 Logout and back in.
@@ -86,18 +73,22 @@ docker ps -a
 docker rm ID_OF_HELLO_WORLD
 ```
 
-## Create required folders
+More info can be found on the [docker website](https://docs.docker.com/engine/install/ubuntu/).
+
+## Install portainer
+
+This is not a required step, however [portainer](https://www.portainer.io/) is a useful tool for setting up and managing docker containers so we are going to install this to make our lives easier to manage our containers later in the future.
 
 ```
-mkdir -p ~/nextcloud/{config,data}
-mkdir -p ~/mariadb/config
-mkdir ~/traefik
-touch ~/traefik/acme.json && chmod 600 ~/traefik/acme.json
+docker volume create portainer_data
+docker run -d -p 8000:8000 -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce
 ```
 
-The acme.json is to hold details for letsencrypt to authorise your certificate.
+Navigate to `http://<pi-ip-address>:9000`. Setup the admin username and password.the the next page, select `Docker` as the container environment to manage. You will now be brought to the portainer homepage. 
 
-## Create docker container
+More info can be found in portainer's [docs](https://documentation.portainer.io/v2.0/deploy/ceinstalldocker/).
+
+## Create docker containers
 
 ### Using docker compose
 
@@ -107,76 +98,42 @@ Install docker-compose
 sudo apt install docker-compose
 ```
 
-Create a **docker-compose.yml** file in the home directory with following content (swap out the password, domain and email details with your own).
-This file is also in the repository as a seperate file.
+#### Setting up the reverse proxy stack
+
+We are going to use [Nginx Proxy Manager](https://nginxproxymanager.com/) for our reverse proxy, but as we are only running on a raspberry pi will setup using sqlite and not a full SQL database.
 
 ```
-version: "2"
+docker network create proxy
+cd ~
+mkdir reverse-proxy
+cd reverse-proxy
+```
+
+Create a **docker-compose.yml** file in the `reverse-proxy` directory with following content.
+
+```
+version: "3"
+
+networks:
+  proxy:
+    external: true
+
 services:
-  nextcloud:
-    image: linuxserver/nextcloud
-    container_name: nextcloud
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/London
-    volumes:
-      - ~/nextcloud/config:/config
-      - ~/nextcloud/data:/data
-    ports:
-      - 9443:443
-    restart: unless-stopped
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.nextcloud.entrypoints=websecure
-      - traefik.http.routers.nextcloud.rule=Host("<your_domain>")
-      - traefik.http.routers.nextcloud.tls=true
-      - traefik.http.routers.nextcloud.tls.certresolver=myhttpchallenge
-      - traefik.http.routers.nextcloud.service=nextcloud
-      - traefik.http.routers.nextcloud.middlewares=nextcloud-regex,nextcloud-headers
-      - traefik.http.services.nextcloud.loadbalancer.server.port=443
-      - traefik.http.services.nextcloud.loadbalancer.server.scheme=https
-      - traefik.http.middlewares.nextcloud-regex.redirectregex.regex=https://(.*)/.well-known/(card|cal)dav
-      - traefik.http.middlewares.nextcloud-regex.redirectregex.replacement=https://$$1/remote.php/dav/
-      - traefik.http.middlewares.nextcloud-regex.redirectregex.permanent=true
-      - traefik.http.middlewares.nextcloud-headers.headers.customFrameOptionsValue=SAMEORIGIN
-      - traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000
-  mariadb:
-    image: linuxserver/mariadb
-    container_name: mariadb
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - MYSQL_ROOT_PASSWORD=ChangeMePlease
-      - TZ=Europe/London
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=nextcloud
-      - MYSQL_PASSWORD=ChangeMeAlso
-    volumes:
-      - ~/mariadb/config:/config
-    ports:
-      - 3306:3306
-    restart: unless-stopped
-  traefik:
-    image: traefik:v2.0
-    container_name: traefik
-    command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.myhttpchallenge.acme.httpchallenge=true
-      - --certificatesresolvers.myhttpchallenge.acme.httpchallenge.entrypoint=web
-      - --certificatesresolvers.myhttpchallenge.acme.email=someaddress@somedomain.com
-      - --certificatesresolvers.myhttpchallenge.acme.storage=/acme.json
-      - --serverstransport.insecureskipverify
+  reverse-proxy:
+    image: "jc21/nginx-proxy-manager:latest"
+    restart: always
     ports:
       - "80:80"
       - "443:443"
+      - "81:81"
+    environment:
+      DB_SQLITE_FILE: "/data/database.sqlite"
+      DISABLE_IPV6: "true"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/traefik/acme.json:/acme.json
-    restart: unless-stopped
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - proxy
 ```
 
 Create container:
@@ -185,42 +142,153 @@ Create container:
 docker-compose up -d
 ```
 
+Navigate to `http://<pi-ip-address>:81` and enter the default credentials:
+
+```
+Email:    admin@example.com
+Password: changeme
+```
+
+You will immediately be prompted to change these.
+
+#### Setting up nextcloud stack
+
+```
+cd ~
+mkdir nextcloud
+cd nextcloud
+mkdir conf.d
+```
+
+Create a **docker-compose.yml** file in the `nextcloud` directory with following content (swap out the details with your own).
+
+```
+version: '3'
+
+volumes:
+  nextcloud-data:
+  nextcloud-db:
+
+networks:
+  frontend:
+    external:
+      name: proxy
+  backend:
+
+services:
+
+  nextcloud-app:
+    image: nextcloud
+    restart: always
+    volumes:
+      - nextcloud-data:/var/www/html
+    environment:
+      - MYSQL_PASSWORD=change_me_please
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_HOST=nextcloud-db
+      - PHP_UPLOAD_LIMIT=10G
+      - PHP_MEMORY_LIMIT=512M
+    networks:
+      - frontend
+      - backend
+
+  nextcloud-db:
+    image: mariadb
+    restart: always
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    volumes:
+      - nextcloud-db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=change_me_please
+      - MYSQL_PASSWORD=change_me_please
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+    networks:
+      - backend
+
+```
+
+Create container:
+
+```
+docker-compose up -d
+```
+
+## Set up the proxy and SSL certificates
+
+Navigate back to the Nginx Proxy Manager Web UI and set up a SSL certificate for your domain using web UI on the `SSL Certificates` tab. This will only be possible once the domain has propagated.
+
+From the `Hosts` tab, set up a new proxy host for your domain and point it to the hostname `nextcloud-app` on port 80. Note as the docker compose was set up using the external network the containers can resolve themselves using their names. On the SSL  tab, select the certificate created earlier and then select the `Force SSL`, `HTTP/2 Support` and `HSTS Enabled` options.
+
 ## Set up nextcloud
 
-Using your browser navigate to **https://<ip_address_of_host:9443>**, you will notice the connection is not secure as it is using a self signed certificate, this is OK when navigating directly to the ip address when on your own network, as when using the domain, it's behind a reverse proxy (as you will see later).
+You should now be able to navigate to your domain (e.g. https://shinynewdomain.co.uk) and the login screen should pop up! You should also now see a secure connection using a lets encrypt certificate. Create the admin user and untick the `Install recommended apps`, for performance reasons using the pi, install only what you need using the nextcloud web gui later. After a short while, and possibly a couple of page refreshes, you should be able to log in and upload/download files from the nextcloud web gui.
 
-Put the following details into the entry form, make sure to select MariaDB:
+### Remove setup warnings
 
-- username and db name are : **nextcloud**
-- password as specified in compose file
-- address is not localhost but **mariadb** as containers can resolve themselves 
+Log into the console for the nextcloud container, if you installed portainer this can be done through the portainer web ui by navigating to the container and clicking the console icon. Otherwise use `docker exer -it nextcloud_nextcloud-app_1 /bin/bash`.
 
-Wait a **few** minutes then navigate to **https://<ip_address_of_host>**, and you should be able to log in and upload/download files from the nextcloud web gui.
+- use `apt update && apt install nano` to install nano
 
-### Correct some installation stuff
+To remove the php-imagick warning you can install libmagickcore-dev:
+  - use `apt install libmagickcore-dev`
 
-**NOTE:** system user is **abc** not **www-data**.
+To set the default phone region, use nano to add the following `'default_phone_region' => 'your-county-code'` to the `config.php` file found in `/var/www/html/config`.
 
-On the pi enter:
+For caldav and carddav, add the following to the `Custom Nginx Configuration` in the advanced tab of the nextcloud proxy set up in the Nginx Proxy Manager.
 
 ```
-docker exec --user abc nextcloud php /config/www/nextcloud/occ db:add-missing-indices
-docker exec --user abc nextcloud php /config/www/nextcloud/occ db:convert-filecache-bigint
+location /.well-known/carddav {
+  return 301 https://<your-domain>/remote.php/dav;
+}
+
+location /.well-known/caldav {
+  return 301 https://<your-domain>/remote.php/dav;
+}
 ```
 
-## Set up external storage (optional)
-By default all files uploaded/downloaded to/from the nextcloud instance will be stored in the nextcloud user's data directory on the pi **~/nextcloud/data/<user>**.
+### Allow access from nextcloud sync apps
+
+The reverse proxy requires the following amendments to the config file otherwise the desktop and mobile sync apps do not work.
+
+Log into the console for the nextcloud container. 
+
+Add/modify the following to the `config.php` file found in `/var/www/html/config`.
+
+```
+'overwrite.cli.url' => 'https://<your-domain>',
+'overwritehost' => '<your-domain>',
+'overwriteprotocol' => 'https',
+```
+
+### Set up cron
+
+Cron should be set up instead of the default AJAX for background jobs, especially if apps which require regular jobs being run (e.g. external storage) are to be installed. The php script to be run is included in the docker container but for some reason cron is not installed on the container and I could not get it to run properly inside the container after installing it. Therefore it needs to be set up on the host.
+
+Use `crontab -e` and add the following:
+
+```
+*/5 * * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/cron.php
+```
+
+### Set up external storage (optional)
+
+By default all files uploaded/downloaded to/from the nextcloud instance will be stored in the nextcloud user's data directory on the pi.
 
 To set up external storage devices (e.g. a NAS or other cloud provider) which can then be accessed through nextcloud:
 
-- login to nextcloud through the web browser
+- first you must install smbclient on the server, log into the console for the nextcloud container
+  - use `apt update && apt install smbclient`
+- now login to nextcloud through the web browser
 - go to **Apps**
 - scroll down and enable **External storage support**
 - go to **Settings -> Administration -> External storages**
 - add global desired storage or instead allows users to mount their own
 - from the storage on the right hand side before clicking the tick icon to accept, additional options can be selected from the dropdown menu, for example allowing users to share from the storage pool
 
-## Set up email server
+### Set up email server (optional)
+
 From the nextcloud admin settings (on webpage) go to basic settings to set up email server, this is useful to be able to send out reset password emails for example.
 
 If you are using a gmail account this is:
@@ -232,42 +300,22 @@ If you are using a gmail account this is:
 - server address -> smtp.gmail.com : 465
 - credentials are your email address and password (or an app password if using 2FA on google).
 
-## Connecting from the outside world
-
-### Set up trusted domains
-
-Change the nextcloud config file **~/nextcloud/config/www/nextcloud/config/config.php** amending the trusted domains section to:
-
-```
-'trusted_domains' => 
-  array (
-    0 => '<host-ip-address>:9443',
-    1 => '<your-domain>',
-  ),
-  'trusted_proxies' =>
-  array (
-    0 => '<host-ip-address>',
-  ),
-
-```
-
-### Go to domain address
-Once the domain address has propagated, browse to it (e.g. https://shinynewdomain.co.uk) and the login screen should pop up! You should also now see a secure connection using a lets encrypt certificate. Traefik set this up when creating the container and will renew this automatically for you.
-
-### Nextcloud server details (information)
-The layout of the data files is slightly different to that from using apache based images/VMs, they put a lot of stuff buried in **/var/www/html** whereas this docker file just keeps it at the top level in the **data** and **config** folders.
-
 ## Updating nextcloud version
-In order to update nextcloud version, first make sure to use latest docker image ***docker-compose pull**, and then perform the in app gui update. Docker image update and recreation of container alone won't update nextcloud version.
 
-Backup then remove nginx config file:
+In order to update nextcloud version, first make sure to use latest docker image **docker-compose pull**, and then perform the in app gui update.
 
-```
-cp /config/nginx/site-confs/default /config/nginx/site-confs/defaultBU
-rm /config/nginx/site-confs/default
-```
-
-Restart the container to replace it with the latest one. And add back in any amendments that were made.
+Restart the container to replace it with the latest one. And add back in any amendments that were made (e.g. with apt install).
 
 ## Security scan
+
 Head to https://scan.nextcloud.com/ and enter your domain. This service does a quick scan of your setup and gives you a score for security of your server.
+
+## With thanks
+
+I put together this guide to suit my own setup but would like to credit the following as without their blogs/articles I would not have got it running:
+
+[the-digital-life](https://www.the-digital-life.com/nextcloud-nginx-proxy-manager-in-10-minutes/)
+
+[eligiblestore](https://eligiblestore.com/blog/2020/09/18/complete-guide-nextcloud-external-hdd-ntfs-nginx-proxy-manager/)
+
+And the setup guides from docker, portainer and nextcloud.
