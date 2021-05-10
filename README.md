@@ -31,7 +31,7 @@ when you first login it will ask you to change the password, do so then relog it
 sudo nano /etc/netplan/01-netcfg.yaml
 ```
 
-add the following changing the ip to your prefernce (note this uses cloudfare 1.1.1.1 nameservers):
+add the following changing the ip to your preference (note this uses cloudfare 1.1.1.1 nameservers):
 
 ```
 network:
@@ -227,7 +227,7 @@ You should now be able to navigate to your domain (e.g. https://shinynewdomain.c
 
 ### Remove setup warnings
 
-Log into the console for the nextcloud container, if you installed portainer this can be done through the portainer web ui by navigating to the container and clicking the console icon. Otherwise use `docker exer -it nextcloud_nextcloud-app_1 /bin/bash`.
+Log into the console for the nextcloud container, if you installed portainer this can be done through the portainer web ui by navigating to the container and clicking the console icon. Otherwise use `docker exec -it nextcloud_nextcloud-app_1 /bin/bash`.
 
 - use `apt update && apt install nano` to install nano
 
