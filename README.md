@@ -287,6 +287,18 @@ To set up external storage devices (e.g. a NAS or other cloud provider) which ca
 - add global desired storage or instead allows users to mount their own
 - from the storage on the right hand side before clicking the tick icon to accept, additional options can be selected from the dropdown menu, for example allowing users to share from the storage pool
 
+If external storgae is added is may be a good idea to add the following to the crontab to make sure it regulay scans all files added not through nextcloud:
+
+```
+0 */1 * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/occ files:scan --all
+```
+
+or just for a user:
+
+```
+0 */1 * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/occ files:scan <your-username>
+```
+
 ### Set up email server (optional)
 
 From the nextcloud admin settings (on webpage) go to basic settings to set up email server, this is useful to be able to send out reset password emails for example.
