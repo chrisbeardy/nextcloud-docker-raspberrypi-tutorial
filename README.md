@@ -56,7 +56,7 @@ forward ports 80 and 443 on your router to point at the raspberry pi.
 
 ```
 curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker-sh
+sh get-docker.sh
 sudo usermod -aG docker ubuntu
 ```
 
