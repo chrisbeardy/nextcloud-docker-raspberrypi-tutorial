@@ -237,7 +237,7 @@ You should now be able to navigate to your domain (e.g. https://shinynewdomain.c
 
 ### Allow access from nextcloud sync apps (configure nextcloud so it *knows* you are using HTTPS)
 
-The reverse proxy requires the following amendments to the config file otherwise the desktop and mobile sync apps do not work (plus the server will also be blind t.
+The reverse proxy requires the following amendments to the config file otherwise the desktop and mobile sync apps do not work.
 
 Log into the console for the nextcloud container through portainer.
 
@@ -289,14 +289,14 @@ By default all files uploaded/downloaded to/from the nextcloud instance will be 
 
 To set up external storage devices (e.g. a NAS or other cloud provider) which can then be accessed through nextcloud:
 
-- first you must install smbclient on the server, log into the console for the nextcloud container
-  - use `apt update && apt install smbclient`
-- now login to nextcloud through the web browser
-- go to **Apps**
-- scroll down and enable **External storage support**
-- go to **Settings -> Administration -> External storages**
-- add global desired storage or instead allows users to mount their own
-- from the storage on the right hand side before clicking the tick icon to accept, additional options can be selected from the dropdown menu, for example allowing users to share from the storage pool
+- First you must install smbclient on the server, log into the console for the nextcloud container
+  - Use `apt update && apt install smbclient`
+- Now login to nextcloud through the web browser
+- Go to **Apps**
+- Scroll down and enable **External storage support**
+- Go to **Settings -> Administration -> External storages**
+- Add global desired storage or instead allows users to mount their own
+- From the storage on the right hand side before clicking the tick icon to accept, additional options can be selected from the dropdown menu, for example allowing users to share from the storage pool
 
 If external storage is added is may be a good idea to add the following to the crontab to make sure it regulay scans all files added not through nextcloud:
 
