@@ -39,7 +39,7 @@ A domain may take a few hours to propagate so you may have to wait at this point
 sudo nano /etc/netplan/50-cloud-init.yaml
 ```
 
-Amend the contents to the following, changing the ip to your preference (note this uses cloudfare 1.1.1.1 nameservers):
+Amend the contents to the following, changing the ip to your preference (note this uses cloudflare's 1.1.1.1 nameservers):
 
 ```
 network:
@@ -94,7 +94,7 @@ docker volume create portainer_data
 docker run -d -p 8000:8000 -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce
 ```
 
-Navigate to `http://<pi-ip-address>:9000`. Setup the admin username and password. On the the next page, select `Get Started` to managethe local docker environment. You will now be brought to the portainer homepage. 
+Navigate to `http://<pi-ip-address>:9000`. Setup the admin username and password. On the the next page, select `Get Started` to manage the local docker environment. You will now be brought to the portainer homepage. 
 
 More info can be found in portainer's [docs](https://documentation.portainer.io/v2.0/deploy/ceinstalldocker/).
 
