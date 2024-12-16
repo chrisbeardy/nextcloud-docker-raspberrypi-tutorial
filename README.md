@@ -1,13 +1,15 @@
-# Installing nextcloud on a raspberry pi with docker
+# Installing Nextcloud on a Raspberry Pi with docker
 
-This is a set up guide for installing [nextcloud](https://nextcloud.com/) on a raspberry pi running ubuntu server using docker.
+This is a set up guide for installing [Nextcloud](https://nextcloud.com/) on a Raspberry Pi running Ubuntu server using docker.
+
+This tutorial uses the **64-bit** version of Ubuntu for the Raspberry Pi's OS. Using the official Raspberry Pi OS is also possible, but if you are using the **32-bit** OS, then alternative docker images may be required.
 
 In order to follow this through you will need a DNS domain.
 
 ## Getting a domain
 Get a domain name and set up the DNS A record to point at your external ip. It may be helpful to set up a script using the API of the hosting service to keep the external ip up to date. xyz domains can be found cheaply.
 
-Alternatively use a DDNS service as either your domain name or to point your record at.
+Alternatively use a DNS service as either your domain name or to point your record at.
 
 A domain may take a few hours to propagate so you may have to wait at this point.
 
@@ -204,7 +206,7 @@ services:
   nextcloud-db:
     image: mariadb
     restart: always
-    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW --innodb-file-per-table=1 --skip-innodb-read-only-compressed
     volumes:
       - nextcloud-db:/var/lib/mysql
     environment:
@@ -295,6 +297,18 @@ To set up external storage devices (e.g. a NAS or other cloud provider) which ca
 - go to **Settings -> Administration -> External storages**
 - add global desired storage or instead allows users to mount their own
 - from the storage on the right hand side before clicking the tick icon to accept, additional options can be selected from the dropdown menu, for example allowing users to share from the storage pool
+
+If external storage is added is may be a good idea to add the following to the crontab to make sure it regulay scans all files added not through nextcloud:
+
+```
+0 */1 * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/occ files:scan --all
+```
+
+or just for a user:
+
+```
+0 */1 * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/occ files:scan <your-username>
+```
 
 ### Set up email server (optional)
 
