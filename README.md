@@ -11,27 +11,33 @@ Alternatively use a DDNS service as either your domain name or to point your rec
 
 A domain may take a few hours to propagate so you may have to wait at this point.
 
-## Install ubuntu raspberry pi
+## Install Ubuntu on the Raspberry Pi
 
-[download page](https://ubuntu.com/download/raspberry-pi)
+[download page](https://www.raspberrypi.com/software/)
 
-- download the **64-bit** image but do not unzip the image
-- insert the sd card into your pc and flash the image using the **gnomes disks** program
-  - select the sd card and use the `restore disk image` option fthe the setting menu
-- plug the pi into your router and find it's ip
-- ssh is enabled by default so you should be able to ssh into it
-  - user: ubuntu
-  - pass: ubuntu
-
-when you first login it will ask you to change the password, do so then relog it over shh. On first boot ubuntu will expand the file system, after a short while you should be able to update ubuntu using `sudo apt update` and `sudo apt upgrade`.
+- First download Raspberry Pi Imager
+- Insert a micro SD card into your PC
+- Using Raspberry Pi Imager
+  - Select your pi type (e.g. Pi 4)
+  - Select the OS
+    - Other general-purpose OS -> Ubuntu -> Ubuntu Server 24.04.1 LTS (64-bit)
+  - Select your SD card
+  - Click NEXT
+  - Select Edit Settings to apply customisation
+  - Set the username to `ubuntu` and a password
+  - Enable SSH from the Services tab
+- Once it has finished writing, insert the SD card into the Pi and boot it up
+- Plug the pi into your router and find it's ip
+- You should now be able to SSH into it
+- Update ubuntu using `sudo apt update` and `sudo apt upgrade`.
 
 ## Set up static IP on the pi
 
 ```
-sudo nano /etc/netplan/01-netcfg.yaml
+sudo nano /etc/netplan/50-cloud-init.yaml
 ```
 
-add the following changing the ip to your prefernce (note this uses cloudfare 1.1.1.1 nameservers):
+Amend the contents to the following, changing the ip to your preference (note this uses cloudfare 1.1.1.1 nameservers):
 
 ```
 network:
@@ -41,20 +47,22 @@ network:
     eth0:
       dhcp4: no
       addresses: [<ip-address>/24]
-      gateway4: 192.168.1.254
+      routes:
+        - to: default
+          via: 192.168.1.254
       nameservers:
         addresses: [1.1.1.1, 1.0.0.1]
 ```
 
 ## Set up port forwarding
 
-forward ports 80 and 443 on your router to point at the raspberry pi.
+Forward ports 80 and 443 on your router to point at the raspberry pi.
 
 ## Install docker
 
 ```
 curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker-sh
+sh get-docker.sh
 sudo usermod -aG docker ubuntu
 ```
 
@@ -84,7 +92,7 @@ docker volume create portainer_data
 docker run -d -p 8000:8000 -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce
 ```
 
-Navigate to `http://<pi-ip-address>:9000`. Setup the admin username and password.the the next page, select `Docker` as the container environment to manage. You will now be brought to the portainer homepage. 
+Navigate to `http://<pi-ip-address>:9000`. Setup the admin username and password. On the the next page, select `Get Started` to managethe local docker environment. You will now be brought to the portainer homepage. 
 
 More info can be found in portainer's [docs](https://documentation.portainer.io/v2.0/deploy/ceinstalldocker/).
 
@@ -223,18 +231,35 @@ From the `Hosts` tab, set up a new proxy host for your domain and point it to th
 
 ## Set up nextcloud
 
-You should now be able to navigate to your domain (e.g. https://shinynewdomain.co.uk) and the login screen should pop up! You should also now see a secure connection using a lets encrypt certificate. Create the admin user and untick the `Install recommended apps`, for performance reasons using the pi, install only what you need using the nextcloud web gui later. After a short while, and possibly a couple of page refreshes, you should be able to log in and upload/download files from the nextcloud web gui.
+You should now be able to navigate to your domain (e.g. https://shinynewdomain.co.uk) and the login screen should pop up! You should also now see a secure connection using a lets encrypt certificate. Create the admin user then skip the install recommended apps, for performance reasons using the pi, install only what you need using the nextcloud web gui later. After a short while, and possibly a couple of page refreshes, you should be able to log in and upload/download files from the nextcloud web gui.
 
-### Remove setup warnings
+### Allow access from nextcloud sync apps (configure nextcloud so it *knows* you are using HTTPS)
 
-Log into the console for the nextcloud container, if you installed portainer this can be done through the portainer web ui by navigating to the container and clicking the console icon. Otherwise use `docker exer -it nextcloud_nextcloud-app_1 /bin/bash`.
+The reverse proxy requires the following amendments to the config file otherwise the desktop and mobile sync apps do not work (plus the server will also be blind t.
 
-- use `apt update && apt install nano` to install nano
+Log into the console for the nextcloud container through portainer.
 
-To remove the php-imagick warning you can install libmagickcore-dev:
-  - use `apt install libmagickcore-dev`
+Install nano `apt update && apt install nano`. 
 
-To set the default phone region, use nano to add the following `'default_phone_region' => 'your-county-code'` to the `config.php` file found in `/var/www/html/config`.
+Add/modify the following to the `config.php` file found in `/var/www/html/config`.
+
+```
+'overwrite.cli.url' => 'https://<your-domain>',
+'overwritehost' => '<your-domain>',
+'overwriteprotocol' => 'https',
+```
+
+### Set up cron
+
+Cron should ideally be set up instead of the default AJAX for background jobs, especially if apps which require regular jobs being run (e.g. external storage) are to be installed. The php script to be run is included in the docker container but the host system cron should be used to run it.
+
+Use `crontab -e` and add the following:
+
+```
+*/5 * * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/cron.php
+```
+
+### Setup caldav and carddav (optional)
 
 For caldav and carddav, add the following to the `Custom Nginx Configuration` in the advanced tab of the nextcloud proxy set up in the Nginx Proxy Manager.
 
@@ -248,28 +273,12 @@ location /.well-known/caldav {
 }
 ```
 
-### Allow access from nextcloud sync apps
+### Set up default phone region (optional)
 
-The reverse proxy requires the following amendments to the config file otherwise the desktop and mobile sync apps do not work.
-
-Log into the console for the nextcloud container. 
-
-Add/modify the following to the `config.php` file found in `/var/www/html/config`.
+Add the following to the `config.php` file found in `/var/www/html/config`.
 
 ```
-'overwrite.cli.url' => 'https://<your-domain>',
-'overwritehost' => '<your-domain>',
-'overwriteprotocol' => 'https',
-```
-
-### Set up cron
-
-Cron should be set up instead of the default AJAX for background jobs, especially if apps which require regular jobs being run (e.g. external storage) are to be installed. The php script to be run is included in the docker container but for some reason cron is not installed on the container and I could not get it to run properly inside the container after installing it. Therefore it needs to be set up on the host.
-
-Use `crontab -e` and add the following:
-
-```
-*/5 * * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/cron.php
+'default_phone_region' => 'your-county-code',
 ```
 
 ### Set up external storage (optional)
