@@ -289,7 +289,7 @@ By default all files uploaded/downloaded to/from the nextcloud instance will be 
 
 To set up external storage devices (e.g. a NAS or other cloud provider) which can then be accessed through nextcloud:
 
-- First you must install smbclient on the server, log into the console for the nextcloud container
+- If using SMB, you must install smbclient on the server, log into the console for the nextcloud container
   - Use `apt update && apt install smbclient`
 - Now login to nextcloud through the web browser
 - Go to **Apps**
@@ -298,7 +298,7 @@ To set up external storage devices (e.g. a NAS or other cloud provider) which ca
 - Add global desired storage or instead allows users to mount their own
 - From the storage on the right hand side before clicking the tick icon to accept, additional options can be selected from the dropdown menu, for example allowing users to share from the storage pool
 
-If external storage is added is may be a good idea to add the following to the crontab to make sure it regulay scans all files added not through nextcloud:
+If external storage is added is may be a good idea to add the following to the crontab to make sure it regularly scans all files added not through nextcloud:
 
 ```
 0 */1 * * * /usr/bin/docker exec --user www-data nextcloud_nextcloud-app_1 php -f /var/www/html/occ files:scan --all
