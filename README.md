@@ -283,6 +283,18 @@ Add the following to the `config.php` file found in `/var/www/html/config`.
 'default_phone_region' => 'your-county-code',
 ```
 
+### Disable file locking (optional)
+
+On the default installation, file locking is handled by the database, depending on your setup and use case, it may beneficial to use redis as a file locking mechanism.
+
+Alternatively disable file locking.
+
+Add the following to the `config.php` file found in `/var/www/html/config`.
+
+```
+‘filelocking.enabled’ => false,
+```
+
 ### Set up external storage (optional)
 
 By default all files uploaded/downloaded to/from the nextcloud instance will be stored in the nextcloud user's data directory on the pi.
